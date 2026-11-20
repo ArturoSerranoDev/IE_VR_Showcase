@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# Line endings
+# ---------------------------------------------------------------------------
+* text=auto
+
+*.cs                  text diff=csharp
+*.shader              text
+*.shadergraph         text
+*.hlsl                text
+*.cginc               text
+*.json                text
+*.md                  text
+*.txt                 text
+*.asmdef              text
+*.inputactions        text
+
+# ---------------------------------------------------------------------------
+# Unity YAML assets. Marked as text so diffs and merges are possible, and
+# flagged for Unity's own merge tool where it is configured.
+# ---------------------------------------------------------------------------
+*.unity               text merge=unityyamlmerge eol=lf
+*.prefab              text merge=unityyamlmerge eol=lf
+*.asset               text merge=unityyamlmerge eol=lf
+*.mat                 text merge=unityyamlmerge eol=lf
+*.meta                text merge=unityyamlmerge eol=lf
+*.controller          text merge=unityyamlmerge eol=lf
+*.anim                text merge=unityyamlmerge eol=lf
+*.physicsMaterial     text merge=unityyamlmerge eol=lf
+
+# ---------------------------------------------------------------------------
+# Binary assets. Listed explicitly so git never tries to diff or convert them.
+# Git LFS is intentionally NOT enabled: this project has no large binaries yet.
+# ---------------------------------------------------------------------------
+*.png                 binary
+*.jpg                 binary
+*.jpeg                binary
+*.psd                 binary
+*.tga                 binary
+*.tif                 binary
+*.exr                 binary
+*.hdr                 binary
+*.fbx                 binary
+*.obj                 binary
+*.blend               binary
+*.ttf                 binary
+*.otf                 binary
+*.wav                 binary
+*.mp3                 binary
+*.ogg                 binary
+*.mp4                 binary
+*.cubemap             binary
+*.dll                 binary
+*.so                  binary
+*.dylib               binary
+*.a                   binary
+*.unitypackage        binary
