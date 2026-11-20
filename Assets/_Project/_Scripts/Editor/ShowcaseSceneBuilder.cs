@@ -27,6 +27,7 @@ namespace IE.VRShowcase.EditorTools
         const string k_ScenesFolder = "Assets/_Project/Scenes/";
         const string k_RigPrefabPath = "Assets/_Project/Prefabs/XR/XR Rig.prefab";
         const string k_CubePrefabPath = "Assets/_Project/Prefabs/Interactables/Cube Interactable.prefab";
+        const string k_BallPrefabPath = "Assets/_Project/Prefabs/Interactables/Ball Interactable.prefab";
         const string k_MaterialsFolder = "Assets/_Project/Materials/";
 
         /// <summary>Height of the table top, i.e. where interactables are placed.</summary>
@@ -43,6 +44,7 @@ namespace IE.VRShowcase.EditorTools
             "04_AirDrawing",
             "05_Climbing",
             "06_TwoHandInteractables",
+            "07_ThrowAssist",
         };
 
         // ------------------------------------------------------------------ menu
@@ -51,6 +53,7 @@ namespace IE.VRShowcase.EditorTools
         public static void BuildAll()
         {
             EnsureCubeInteractablePrefab();
+            EnsureBallInteractablePrefab();
 
             BuildGrabTypesScene();
             BuildSocketsScene();
@@ -58,6 +61,7 @@ namespace IE.VRShowcase.EditorTools
             BuildAirDrawingScene();
             BuildClimbingScene();
             BuildTwoHandScene();
+            BuildThrowAssistScene();
 
             AddScenesToBuildSettings();
 
@@ -485,6 +489,198 @@ namespace IE.VRShowcase.EditorTools
                 if (collider != null)
                     grab.colliders.Add(collider);
             }
+        }
+
+        // ------------------------------------------------- scene 7: throw assistant
+
+        [MenuItem("IE Showcase/Scenes/07 Throw Assist")]
+        public static void BuildThrowAssistScene()
+        {
+            EnsureBallInteractablePrefab();
+
+            var ctx = CreateBaseScene("07_ThrowAssist");
+            var ballPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(k_BallPrefabPath);
+
+            const float basketZ = 3f;
+            // Rim set well above hand height on purpose. With a rim near release height the
+            // solved arc arrives almost level and the ball clips the near rim; forcing a lob
+            // makes the ball drop into the basket steeply, with room to spare.
+            const float rimY = 1.75f;
+            const float basketRadius = 0.3f;
+            const float basketDepth = 0.34f;
+
+            var target = BuildBasket(ctx, new Vector3(0f, 0f, basketZ), rimY, basketRadius, basketDepth);
+
+            // Ball supply: take one and the socket restocks itself.
+            var spawnParent = new GameObject("Spawned Balls");
+            spawnParent.transform.SetParent(ctx.content, false);
+
+            var dispenser = CreateSocket(ctx, "Ball Dispenser",
+                new Vector3(-0.45f, k_TableTopY + 0.1f, k_TableZ));
+            var spawner = dispenser.AddComponent<SocketItemSpawner>();
+            var spawnerSo = new SerializedObject(spawner);
+            spawnerSo.FindProperty("m_ItemPrefab").objectReferenceValue = ballPrefab;
+            spawnerSo.FindProperty("m_SpawnOnStart").boolValue = true;
+            spawnerSo.FindProperty("m_SpawnParent").objectReferenceValue = spawnParent.transform;
+            spawnerSo.ApplyModifiedPropertiesWithoutUndo();
+
+            BuildAssistButton(ctx, target, new Vector3(0.45f, k_TableTopY, k_TableZ));
+
+            CreateLabel(ctx.content, "Take a ball, throw at the basket",
+                new Vector3(-0.45f, k_TableTopY + 0.34f, k_TableZ), 0.018f);
+            CreateLabel(ctx.content, "Throw Assist", new Vector3(0f, 2.5f, basketZ - 0.5f), 0.07f);
+
+            SaveScene(ctx.scene, "07_ThrowAssist");
+        }
+
+        /// <summary>
+        /// Builds a basket out of primitives: a ring of wall segments with a closed bottom, so
+        /// scored balls collect visibly instead of scattering across the floor.
+        /// </summary>
+        static ThrowAssistTarget BuildBasket(SceneContext ctx, Vector3 basePosition, float rimY,
+            float radius, float depth)
+        {
+            var frameMat = GetOrCreateMaterial("M_BasketFrame", new Color(0.3f, 0.32f, 0.36f), 0.5f, 0.6f);
+            var rimMat = GetOrCreateMaterial("M_BasketRim", new Color(0.95f, 0.35f, 0.1f), 0.4f);
+            var boardMat = GetOrCreateMaterial("M_Backboard", new Color(0.85f, 0.86f, 0.88f));
+
+            var basket = new GameObject("Basket");
+            basket.transform.SetParent(ctx.content, false);
+            basket.transform.position = basePosition;
+
+            var bottomY = rimY - depth;
+
+            // Support post, under the closed basket bottom so it never blocks a throw.
+            CreatePrimitive(PrimitiveType.Cylinder, "Post", basket.transform,
+                basePosition + new Vector3(0f, bottomY * 0.5f, 0f), Quaternion.identity,
+                new Vector3(0.07f, bottomY * 0.5f, 0.07f), frameMat);
+
+            CreatePrimitive(PrimitiveType.Cube, "Backboard", basket.transform,
+                basePosition + new Vector3(0f, rimY + 0.33f, 0.36f), Quaternion.identity,
+                new Vector3(1.1f, 0.72f, 0.05f), boardMat);
+
+            // Unity's Cylinder primitive ships a CapsuleCollider, not a cylinder one, so at this
+            // scale its collider becomes a dome bulging up into the basket that balls rest on
+            // instead of settling on the floor. Keep the flat mesh, swap in a flat box collider.
+            var bottom = CreatePrimitive(PrimitiveType.Cylinder, "Bottom", basket.transform,
+                basePosition + new Vector3(0f, bottomY, 0f), Quaternion.identity,
+                new Vector3(radius * 2f, 0.012f, radius * 2f), frameMat, removeCollider: true);
+            var bottomCollider = bottom.AddComponent<BoxCollider>();
+            bottomCollider.size = new Vector3(1f, 2f, 1f);   // matches the cylinder mesh bounds
+
+            // Ring of tangent wall segments approximating a cylinder.
+            var walls = new GameObject("Walls");
+            walls.transform.SetParent(basket.transform, false);
+
+            const int segments = 14;
+            var segmentWidth = 2f * Mathf.PI * radius / segments * 1.25f;
+            for (var i = 0; i < segments; i++)
+            {
+                var angle = i * Mathf.PI * 2f / segments;
+                var outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                CreatePrimitive(PrimitiveType.Cube, $"Wall {i + 1:00}", walls.transform,
+                    basePosition + new Vector3(0f, bottomY + depth * 0.5f, 0f) + outward * radius,
+                    Quaternion.LookRotation(outward, Vector3.up),
+                    new Vector3(segmentWidth, depth, 0.02f),
+                    i % 2 == 0 ? rimMat : frameMat);
+            }
+
+            // Aimed at the centre of the opening, a hair above the rim plane. Aiming *inside* the
+            // basket looks tempting but fails: the ball would drop below rim height slightly
+            // before reaching the basket and clip the near wall from outside. Aiming level with
+            // the opening means the ball is dead centre, with the full inner radius of clearance,
+            // exactly when it passes the rim, and then falls in.
+            var aimPoint = new GameObject("Aim Point");
+            aimPoint.transform.SetParent(basket.transform, false);
+            aimPoint.transform.position = basePosition + new Vector3(0f, rimY + 0.02f, 0f);
+
+            var target = basket.AddComponent<ThrowAssistTarget>();
+            var targetSo = new SerializedObject(target);
+            targetSo.FindProperty("m_AimPoint").objectReferenceValue = aimPoint.transform;
+            targetSo.FindProperty("m_AssistEnabled").boolValue = true;
+            targetSo.ApplyModifiedPropertiesWithoutUndo();
+
+            return target;
+        }
+
+        /// <summary>
+        /// Builds the toggle button. It needs a kinematic Rigidbody: the hand's grab volume is a
+        /// trigger with no Rigidbody, and Unity sends no trigger messages between a static trigger
+        /// and a static collider, so without one the button is simply undetectable.
+        /// </summary>
+        static void BuildAssistButton(SceneContext ctx, ThrowAssistTarget target, Vector3 basePosition)
+        {
+            var housingMat = GetOrCreateMaterial("M_ButtonHousing", new Color(0.22f, 0.23f, 0.26f), 0.4f);
+            var capMat = GetOrCreateMaterial("M_ButtonCap", new Color(0.25f, 0.9f, 0.35f), 0.35f);
+
+            var button = new GameObject("Assist Button");
+            button.transform.SetParent(ctx.content, false);
+            button.transform.position = basePosition;
+
+            CreatePrimitive(PrimitiveType.Cylinder, "Housing", button.transform,
+                basePosition + new Vector3(0f, 0.012f, 0f), Quaternion.identity,
+                new Vector3(0.16f, 0.012f, 0.16f), housingMat, removeCollider: true);
+
+            var cap = CreatePrimitive(PrimitiveType.Cylinder, "Cap", button.transform,
+                basePosition + new Vector3(0f, 0.045f, 0f), Quaternion.identity,
+                new Vector3(0.11f, 0.022f, 0.11f), capMat, removeCollider: true);
+
+            // One collider on the root covers the whole button, so the children stay purely visual.
+            var touchVolume = button.AddComponent<BoxCollider>();
+            touchVolume.center = new Vector3(0f, 0.04f, 0f);
+            touchVolume.size = new Vector3(0.14f, 0.09f, 0.14f);
+
+            var body = button.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            body.useGravity = false;
+
+            var interactable = button.AddComponent<XRSimpleInteractable>();
+            interactable.interactionManager = ctx.interactionManager;
+
+            var label = CreateLabel(button.transform, "THROW ASSIST\nON",
+                basePosition + new Vector3(0f, 0.3f, 0f), 0.016f);
+
+            var toggle = button.AddComponent<AssistToggleButton>();
+            var toggleSo = new SerializedObject(toggle);
+            toggleSo.FindProperty("m_Target").objectReferenceValue = target;
+            toggleSo.FindProperty("m_Cap").objectReferenceValue = cap.transform;
+            toggleSo.FindProperty("m_IndicatorRenderer").objectReferenceValue = cap.GetComponent<Renderer>();
+            toggleSo.FindProperty("m_Label").objectReferenceValue = label.GetComponent<TextMesh>();
+            toggleSo.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void EnsureBallInteractablePrefab()
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(k_BallPrefabPath) != null)
+                return;
+
+            if (!AssetDatabase.IsValidFolder("Assets/_Project/Prefabs/Interactables"))
+                AssetDatabase.CreateFolder("Assets/_Project/Prefabs", "Interactables");
+
+            var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            ball.name = "Ball Interactable";
+            ball.transform.localScale = Vector3.one * 0.14f;
+            ball.GetComponent<Renderer>().sharedMaterial =
+                GetOrCreateMaterial("M_Ball", new Color(0.95f, 0.45f, 0.08f), 0.3f);
+
+            var body = ball.AddComponent<Rigidbody>();
+            body.mass = 0.6f;
+            // The assistant solves plain ballistic motion, so drag has to stay at zero or an
+            // assisted throw falls short of the basket.
+            body.linearDamping = 0f;
+            body.angularDamping = 0.05f;
+            body.useGravity = true;
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+            var grab = ball.AddComponent<XRGrabInteractable>();
+            grab.movementType = XRBaseInteractable.MovementType.Instantaneous;
+            grab.useDynamicAttach = true;
+            grab.throwOnDetach = true;
+
+            ball.AddComponent<ThrowAssistant>();
+
+            PrefabUtility.SaveAsPrefabAsset(ball, k_BallPrefabPath);
+            Object.DestroyImmediate(ball);
         }
 
         // ------------------------------------------------------------- shared setup

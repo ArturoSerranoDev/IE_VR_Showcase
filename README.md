@@ -18,9 +18,12 @@ Android build support is **not** configured — see [Platform notes](#platform-n
 
 Open any scene under `Assets/_Project/Scenes/` and press Play.
 
-You do **not** need a headset. The XR Interaction Simulator is imported and set to
-auto-instantiate in the editor only, so every scene gets mouse-and-keyboard control of the
-simulated headset and controllers with no per-scene setup.
+The XR Interaction Simulator sample is imported at
+`Assets/Samples/XR Interaction Toolkit/3.3.2/XR Interaction Simulator`, which lets you drive the
+scenes with mouse and keyboard instead of a headset. **Automatic instantiation is currently
+turned off.** To use it, either tick *Use XR Interaction Simulator in scenes* under
+`Edit > Project Settings > XR Plug-in Management > XR Interaction Toolkit` (and point it at that
+prefab), or drop the prefab into a scene by hand.
 
 > **Note:** the simulator starts the simulated headset at the tracking origin, and the rig uses
 > Floor tracking mode, so play mode begins with the camera at floor height. Use the simulator's
@@ -36,6 +39,42 @@ simulated headset and controllers with no per-scene setup.
 | `04_AirDrawing` | Grab the pencil and pull the trigger to draw `LineRenderer` strokes in mid-air |
 | `05_Climbing` | Two climbing walls: one with discrete holds, one grabbable across its whole surface |
 | `06_TwoHandInteractables` | A hammer, a staff, and a gun with two distinct grab points |
+| `07_ThrowAssist` | Throw assistance: near-miss throws at a basket are snapped onto target, toggled by a button in the scene |
+
+### Throw assist
+
+`07_ThrowAssist` has a ball dispenser, a basket and a button that switches assistance on and off.
+
+With assistance on, a throw whose release direction is within a tolerance (default 14°) of a
+direction that *would* have landed is rotated onto that solution. The player's release **speed is
+preserved exactly** — only the aim is corrected — so a throw that is too weak to reach the basket
+stays too weak. Throws further off than the tolerance are left completely alone.
+
+Two arcs always reach a reachable target — a flat one and a lobbed one — and the solver keeps only
+those that arrive falling at least `minDescentAngle` (35° for the basket) below horizontal. This is
+not cosmetic: a flat arc passes through the centre of the opening on paper but reaches rim height
+*before* the basket and clips the near rim. Requiring a real lob is what makes assisted throws
+actually drop in, and it means a flat throw correctly gets no assist — you cannot score flat.
+
+All of the logic lives on the thrown object, in `ThrowAssistant`:
+
+- XRI ships an `IXRAimAssist` hook, but `XRGrabInteractable` resolves it with
+  `GetComponentInParent` on the *interactor*, so it has to live on the rig. This implementation
+  deliberately does not use it, leaving the rig free of assist components.
+- `XRGrabInteractable` applies the throw velocity in **LateUpdate**, after `selectExited` fires, so
+  the release velocity cannot be read in the release handler. The release arms the component and
+  the correction runs on the next physics step, where the velocity is still the release velocity
+  and gravity has not been integrated into it yet.
+- The solver assumes plain ballistic motion, so the ball's Rigidbody keeps `linearDamping` at 0.
+  With drag, an assisted throw falls short.
+
+`ThrowAssistTarget` on the basket holds only the aim point and the on/off flag, and registers
+itself in a static list so balls spawned at runtime find it with nothing wired up.
+
+> The toggle button is driven by **select, not by a physical press**: the hands carry no solid
+> colliders, only a trigger volume for grabbing, so nothing in the rig can push a cap. Touch the
+> button and squeeze grip. It also carries a kinematic Rigidbody, because Unity sends no trigger
+> messages between a static trigger and a static collider.
 
 ## The shared XR rig
 
@@ -75,7 +114,8 @@ Assets/_Project/
 └── _Scripts/
     ├── Editor/                 generators for the rig and the scenes
     └── Runtime/
-        ├── Interactions/       AirDrawPen, SocketItemSpawner
+        ├── Interactions/       AirDrawPen, SocketItemSpawner,
+        │                       ThrowAssistant, ThrowAssistTarget, AssistToggleButton
         └── XR/                 ShowcaseDirectInteractor, XRInputActionsEnabler
 ```
 

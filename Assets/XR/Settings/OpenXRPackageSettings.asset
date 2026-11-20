@@ -103,7 +103,9 @@ MonoBehaviour:
   m_Name: Standalone
   m_EditorClassIdentifier: Unity.XR.OpenXR::UnityEngine.XR.OpenXR.OpenXRSettings
   features:
+  - {fileID: 3961786829468070811}
   - {fileID: -9023004275445649104}
+  - {fileID: 6053613082656070245}
   - {fileID: 3185785306813691622}
   - {fileID: 4377895589185403737}
   - {fileID: 7886077818301878322}
@@ -122,8 +124,6 @@ MonoBehaviour:
   - {fileID: -7570260030605197395}
   - {fileID: 1396734961080453692}
   - {fileID: 5745910266144256897}
-  - {fileID: 3961786829468070811}
-  - {fileID: 6053613082656070245}
   customLoaderName: 
   m_renderMode: 1
   m_latencyOptimization: 0
@@ -239,7 +239,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2a24be4b5ebfe5f4d8ed1de9b25cb7aa, type: 3}
   m_Name: HandCommonPosesInteraction Standalone
   m_EditorClassIdentifier: Unity.XR.OpenXR::UnityEngine.XR.OpenXR.Features.Interactions.HandCommonPosesInteraction
-  m_enabled: 0
+  m_enabled: 1
   nameUi: Hand Interaction Poses
   version: 0.0.1
   featureIdInternal: com.unity.openxr.feature.input.handinteractionposes
